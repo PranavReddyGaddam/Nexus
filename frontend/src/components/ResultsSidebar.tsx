@@ -75,7 +75,7 @@ export default function ResultsSidebar({
     return isOpen ? (
       <div 
         className={`
-          fixed right-0 top-0 bottom-0 z-40
+          fixed right-0 top-[64px] bottom-0 z-40
           w-96 bg-gray-900 border-l border-gray-700 shadow-2xl
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -133,7 +133,7 @@ export default function ResultsSidebar({
   return (
     <div 
       className={`
-        fixed right-0 top-0 bottom-0 z-40
+        fixed right-0 top-[64px] bottom-0 z-40
         w-96 bg-gray-900 border-l border-gray-700 shadow-2xl
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : 'translate-x-full'}
@@ -170,7 +170,7 @@ export default function ResultsSidebar({
       </div>
 
       {/* Results List - Scrollable */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3 pb-20">
         <div className="flex items-center gap-2 mb-2">
           <Lightbulb size={18} className="text-yellow-400" />
           <h3 className="text-sm font-semibold text-white">
