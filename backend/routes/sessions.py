@@ -1,72 +1,93 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
 from models.schemas import SessionCreate, SessionResponse
-from models.database import Session as DBSession
-from config.database import get_db
+from config.snowflake import get_snowflake_connection
 
 router = APIRouter()
 
 @router.get("/sessions", response_model=List[SessionResponse])
-async def get_sessions(db: Session = Depends(get_db)):
+async def get_sessions(conn = Depends(get_snowflake_connection)):
     """
     Get all analysis sessions
     """
     try:
-        sessions = db.query(DBSession).order_by(DBSession.created_at.desc()).all()
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT ID, PRODUCT_IDEA, STATUS, CREATED_AT, UPDATED_AT FROM SESSIONS ORDER BY CREATED_AT DESC")
+            rows = cur.fetchall()
+        finally:
+            cur.close()
         return [
             SessionResponse(
-                id=session.id,
-                product_idea=session.product_idea,
-                status=session.status,
-                created_at=session.created_at,
-                updated_at=session.updated_at
+                id=row[0],
+                product_idea=row[1],
+                status=row[2],
+                created_at=row[3],
+                updated_at=row[4],
             )
-            for session in sessions
+            for row in rows
         ]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/sessions", response_model=SessionResponse)
-async def create_session(session_data: SessionCreate, db: Session = Depends(get_db)):
+async def create_session(session_data: SessionCreate, conn = Depends(get_snowflake_connection)):
     """
     Create a new analysis session
     """
     try:
-        db_session = DBSession(
-            product_idea=session_data.product_idea,
-            status="created"
-        )
-        db.add(db_session)
-        db.commit()
-        db.refresh(db_session)
-        
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "INSERT INTO SESSIONS (PRODUCT_IDEA, STATUS, CREATED_AT, UPDATED_AT) VALUES (%s, %s, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP())",
+                (session_data.product_idea, "created"),
+            )
+        finally:
+            cur.close()
+
+        cur = conn.cursor()
+        try:
+            cur.execute(
+                "SELECT ID, PRODUCT_IDEA, STATUS, CREATED_AT, UPDATED_AT FROM SESSIONS WHERE PRODUCT_IDEA=%s ORDER BY CREATED_AT DESC LIMIT 1",
+                (session_data.product_idea,),
+            )
+            row = cur.fetchone()
+            if not row:
+                raise RuntimeError("Failed to retrieve new session after insert")
+        finally:
+            cur.close()
+
         return SessionResponse(
-            id=db_session.id,
-            product_idea=db_session.product_idea,
-            status=db_session.status,
-            created_at=db_session.created_at,
-            updated_at=db_session.updated_at
+            id=row[0],
+            product_idea=row[1],
+            status=row[2],
+            created_at=row[3],
+            updated_at=row[4],
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/sessions/{session_id}", response_model=SessionResponse)
-async def get_session(session_id: int, db: Session = Depends(get_db)):
+async def get_session(session_id: int, conn = Depends(get_snowflake_connection)):
     """
     Get a specific analysis session
     """
     try:
-        session = db.query(DBSession).filter(DBSession.id == session_id).first()
-        if not session:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT ID, PRODUCT_IDEA, STATUS, CREATED_AT, UPDATED_AT FROM SESSIONS WHERE ID=%s", (session_id,))
+            row = cur.fetchone()
+        finally:
+            cur.close()
+        if not row:
             raise HTTPException(status_code=404, detail="Session not found")
         
         return SessionResponse(
-            id=session.id,
-            product_idea=session.product_idea,
-            status=session.status,
-            created_at=session.created_at,
-            updated_at=session.updated_at
+            id=row[0],
+            product_idea=row[1],
+            status=row[2],
+            created_at=row[3],
+            updated_at=row[4]
         )
     except HTTPException:
         raise
@@ -74,17 +95,25 @@ async def get_session(session_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/sessions/{session_id}")
-async def delete_session(session_id: int, db: Session = Depends(get_db)):
+async def delete_session(session_id: int, conn = Depends(get_snowflake_connection)):
     """
     Delete an analysis session
     """
     try:
-        session = db.query(DBSession).filter(DBSession.id == session_id).first()
-        if not session:
+        cur = conn.cursor()
+        try:
+            cur.execute("SELECT 1 FROM SESSIONS WHERE ID=%s", (session_id,))
+            exists = cur.fetchone() is not None
+        finally:
+            cur.close()
+        if not exists:
             raise HTTPException(status_code=404, detail="Session not found")
-        
-        db.delete(session)
-        db.commit()
+
+        cur = conn.cursor()
+        try:
+            cur.execute("DELETE FROM SESSIONS WHERE ID=%s", (session_id,))
+        finally:
+            cur.close()
         
         return {"message": "Session deleted successfully"}
     except HTTPException:

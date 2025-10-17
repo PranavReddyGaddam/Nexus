@@ -42,7 +42,7 @@ class AnalysisResults(BaseModel):
 class AnalysisResponse(BaseModel):
     session_id: int
     product_idea: str
-    analysis_results: AnalysisResults
+    analysis_results: Optional[AnalysisResults] = None
     metadata: Dict[str, Any]
     status: str
 
@@ -58,3 +58,39 @@ class WebSocketMessage(BaseModel):
     session_id: int
     data: Optional[Dict[str, Any]] = None
     message: Optional[str] = None
+
+# --------------------------
+# New MVP OpenAI ranking API
+# --------------------------
+
+class IdeaAnalyzeRequest(BaseModel):
+    idea: str
+    max_personas: int = 5
+
+class PersonaCard(BaseModel):
+    id: str
+    name: str
+    title: str
+    location: str
+    industry: str
+    expertise: list[str]
+    experience: str
+
+class PersonaEvaluation(BaseModel):
+    persona: PersonaCard
+    relevanceScore: float
+    rating: int
+    sentiment: str
+    keyInsight: str
+    reason: str
+
+class IdeaAnalyzeSummary(BaseModel):
+    averageRating: float
+    overallSentiment: str
+    topConcerns: list[str]
+    topOpportunities: list[str]
+
+class IdeaAnalyzeResponse(BaseModel):
+    enhancedIdea: str
+    results: list[PersonaEvaluation]
+    summary: IdeaAnalyzeSummary

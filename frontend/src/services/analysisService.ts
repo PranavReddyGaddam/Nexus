@@ -6,6 +6,7 @@ export interface PersonaRating {
   sentiment: 'positive' | 'neutral' | 'cautious';
   keyInsight: string;
   relevanceScore?: number; // How relevant this persona is to the idea (0-1)
+  detailedAnalysis?: string; // Detailed explanation from the persona
 }
 
 export interface AnalysisRequest {
@@ -62,45 +63,41 @@ function mockAnalysis(allPersonas: Persona[], idea: string, maxPersonas: number 
  */
 async function llmAnalysis(allPersonas: Persona[], idea: string, maxPersonas: number = 5): Promise<PersonaRating[]> {
   try {
-    // TODO: Replace with actual API call to your backend
-    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-    
-    const response = await fetch(`${API_BASE_URL}/research/analyze-idea`, {
+    const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+    const response = await fetch(`${API_BASE_URL}/rank`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        idea,
-        max_agents: maxPersonas,
-        available_personas: allPersonas.map(p => ({
-          id: p.id,
-          name: p.name,
-          industry: p.industry,
-          expertise: p.expertise,
-          location: p.location,
-        })),
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ idea, max_personas: maxPersonas }),
     });
 
-    if (!response.ok) {
-      throw new Error('LLM analysis failed');
-    }
+    if (!response.ok) throw new Error('LLM analysis failed');
 
     const data = await response.json();
-    
-    // Transform backend response to PersonaRating format
-    return data.results.map((result: any) => ({
-      persona: allPersonas.find(p => p.id === result.persona_id)!,
-      rating: result.rating,
-      sentiment: result.sentiment,
-      keyInsight: result.key_insight,
-      relevanceScore: result.relevance_score,
-    }));
-    
+    const mapped: PersonaRating[] = data.results.map((r: any, idx: number) => {
+      const persona: Persona = {
+        id: r.persona?.id ?? String(idx + 1),
+        name: r.persona?.name ?? `Persona ${idx + 1}`,
+        title: r.persona?.title ?? 'Professional',
+        location: r.persona?.location ?? 'Unknown',
+        industry: r.persona?.industry ?? 'General',
+        expertise: r.persona?.expertise ?? [],
+        experience: r.persona?.experience ?? '—',
+        bio: '',
+        insights: [],
+      };
+
+      return {
+        persona,
+        rating: r.rating,
+        sentiment: (r.sentiment || 'neutral') as 'positive' | 'neutral' | 'cautious',
+        keyInsight: r.keyInsight || '—',
+        relevanceScore: r.relevanceScore,
+        detailedAnalysis: r.reason || '—',
+      };
+    });
+    return mapped.sort((a, b) => b.rating - a.rating);
   } catch (error) {
     console.error('LLM analysis failed, falling back to mock:', error);
-    // Fallback to mock if API fails
     return mockAnalysis(allPersonas, idea, maxPersonas);
   }
 }
@@ -159,8 +156,8 @@ export async function analyzeStartupIdea(
  * Update these when you're ready to connect to your backend
  */
 export const LLM_CONFIG = {
-  enabled: false, // Set to true when backend is ready
-  apiUrl: 'http://localhost:8000/api/v1',
+  enabled: true, // Backend ready
+  apiUrl: 'http://localhost:8000/api',
   timeout: 30000, // 30 second timeout
   maxRetries: 2,
 };
