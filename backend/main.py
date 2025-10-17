@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import analyze, sessions, websocket
+from routes import analyze, sessions, websocket, voice_consult
 from config.settings import settings
 
 # Create FastAPI app
 app = FastAPI(
     title="Tunnel AI Backend",
-    description="AI-powered market research platform",
+    description="AI-powered market research platform with voice consultations",
     version="1.0.0"
 )
 
@@ -20,9 +20,10 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(analyze.router, prefix="/api")
-app.include_router(sessions.router, prefix="/api")
-app.include_router(websocket.router)
+app.include_router(analyze.router, prefix="/api", tags=["Analysis"])
+app.include_router(sessions.router, prefix="/api", tags=["Sessions"])
+app.include_router(websocket.router, tags=["WebSocket"])
+app.include_router(voice_consult.router, prefix="/api", tags=["Voice Consultation"])
 
 @app.get("/")
 async def root():

@@ -5,8 +5,8 @@ class Settings(BaseSettings):
     # OpenAI Configuration
     openai_api_key: str = ""
     
-    # Database Configuration
-    database_url: str = "sqlite:///./database.sqlite"
+    # ElevenLabs Configuration
+    elevenlabs_api_key: str = ""
     
     # Server Configuration
     host: str = "0.0.0.0"

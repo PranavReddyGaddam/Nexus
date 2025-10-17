@@ -8,3 +8,4 @@ openai==1.3.0
 python-dotenv==1.0.0
 snowflake-connector-python==3.11.0
 pydantic-settings==2.6.1
+elevenlabs==1.0.0

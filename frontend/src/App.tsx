@@ -416,6 +416,16 @@ function App() {
                   persona={selectedPersona}
                   isOpen={isModalOpen}
                   onClose={handleModalClose}
+                  analysisContext={
+                    selectedPersona && analysisResults.length > 0
+                      ? {
+                          rating: analysisResults.find(r => r.persona.id === selectedPersona.id)?.rating,
+                          sentiment: analysisResults.find(r => r.persona.id === selectedPersona.id)?.sentiment,
+                          keyInsight: analysisResults.find(r => r.persona.id === selectedPersona.id)?.keyInsight,
+                          startupIdea: startupIdea
+                        }
+                      : undefined
+                  }
                 />
 
                 {/* Analysis Tab */}

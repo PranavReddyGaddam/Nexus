@@ -1,4 +1,6 @@
-import { X, Briefcase, MapPin, Award, TrendingUp } from 'lucide-react';
+import { useState } from 'react';
+import { X, Briefcase, MapPin, Award, TrendingUp, Phone } from 'lucide-react';
+import VoiceCallModal from './VoiceCallModal';
 
 export interface Persona {
   id: string;
@@ -18,10 +20,80 @@ interface PersonaModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConsult?: (persona: Persona) => void;
+  // Optional: Analysis context from ChatGPT to pass to voice call
+  analysisContext?: {
+    rating?: number;
+    sentiment?: string;
+    keyInsight?: string;
+    startupIdea?: string;
+  };
 }
 
-export default function PersonaModal({ persona, isOpen, onClose, onConsult }: PersonaModalProps) {
+export default function PersonaModal({ persona, isOpen, onClose, onConsult, analysisContext }: PersonaModalProps) {
+  const [isStartingCall, setIsStartingCall] = useState(false);
+  const [voiceCallData, setVoiceCallData] = useState<{
+    agentId: string;
+    consultationId: number;
+  } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
   if (!isOpen || !persona) return null;
+
+  const handleStartConsultation = async () => {
+    setIsStartingCall(true);
+    setError(null);
+
+    try {
+      const response = await fetch('http://localhost:8000/api/voice/start-consultation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          persona: {
+            id: persona.id,
+            name: persona.name,
+            title: persona.title,
+            location: persona.location,
+            industry: persona.industry,
+            expertise: persona.expertise,
+            experience: persona.experience,
+            bio: persona.bio,
+            insights: persona.insights || [],
+          },
+          startup_idea: analysisContext?.startupIdea || null,
+          // Pass the analysis context if available
+          previous_analysis: analysisContext ? {
+            rating: analysisContext.rating,
+            sentiment: analysisContext.sentiment,
+            key_insight: analysisContext.keyInsight,
+          } : null,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start consultation');
+      }
+
+      const data = await response.json();
+      
+      setVoiceCallData({
+        agentId: data.agent_id,
+        consultationId: data.consultation_id,
+      });
+    } catch (err: any) {
+      console.error('Error starting consultation:', err);
+      setError(err.message || 'Failed to start voice consultation. Please try again.');
+      setIsStartingCall(false);
+    }
+  };
+
+  const handleCloseVoiceCall = () => {
+    console.log('Closing voice call modal and resetting state');
+    setVoiceCallData(null);
+    setIsStartingCall(false);
+    setError(null);
+  };
 
   return (
     <div 
@@ -117,18 +189,41 @@ export default function PersonaModal({ persona, isOpen, onClose, onConsult }: Pe
             </div>
           )}
 
-          {/* Action Button */}
-          <button
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (onConsult && persona) onConsult(persona);
-            }}
-          >
-            Consult {persona.name.split(' ')[0]} for Market Research
-          </button>
+          {/* Error Display */}
+          {error && (
+            <div className="mb-4 p-3 bg-red-900 bg-opacity-30 border border-red-500 rounded-lg">
+              <p className="text-red-300 text-sm">{error}</p>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="space-y-3">
+            <button 
+              onClick={handleStartConsultation}
+              disabled={isStartingCall}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-800 disabled:cursor-not-allowed text-white font-semibold py-3 rounded-lg transition-colors flex items-center justify-center gap-2"
+            >
+              <Phone size={20} />
+              {isStartingCall ? 'Starting Call...' : `Voice Call with ${persona.name.split(' ')[0]}`}
+            </button>
+            
+            <p className="text-center text-gray-400 text-xs">
+              Click to start a voice consultation and get real-time expert feedback
+            </p>
+          </div>
         </div>
       </div>
+
+      {/* Voice Call Modal */}
+      {voiceCallData && (
+        <VoiceCallModal
+          isOpen={true}
+          onClose={handleCloseVoiceCall}
+          agentId={voiceCallData.agentId}
+          personaName={persona.name}
+          consultationId={voiceCallData.consultationId}
+        />
+      )}
     </div>
   );
 }
