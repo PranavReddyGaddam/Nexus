@@ -1,9 +1,10 @@
 import React, { useState, useMemo, useCallback, memo } from "react";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar'
-import PixelBlast from './PixelBlast/PixelBlast'
+import HeroBackground from './components/HeroBackground'
 import { World } from './components/ui/globe'
 import { Mic } from 'lucide-react'
+import FileUpload from './components/FileUpload'
 import PersonaModal from './components/PersonaModal'
 import ResultsSidebar from './components/ResultsSidebar'
 import AnalysisTab from './components/AnalysisTab'
@@ -21,12 +22,48 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [startupIdea, setStartupIdea] = useState("");
   const [analysisResults, setAnalysisResults] = useState<PersonaRating[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [focusLocation, setFocusLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [highlightedLocations, setHighlightedLocations] = useState<string[]>([]);
 
   // Analyze startup idea using the analysis service
   const handleAnalyzeIdea = async (idea: string) => {
     const allPersonas = getAllPersonas();
+    
+    // Process attached files if any
+    const fileContents: { name: string; content: string; }[] = [];
+    
+    if (selectedFiles.length > 0) {
+      try {
+        // Read all files
+        const readPromises = selectedFiles.map(file => {
+          return new Promise<{ name: string; content: string; }>((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => {
+              resolve({
+                name: file.name,
+                content: reader.result as string
+              });
+            };
+            reader.onerror = reject;
+            
+            // Read as text if text file, otherwise as data URL
+            if (file.type.startsWith('text/') || 
+                file.name.endsWith('.json') || 
+                file.name.endsWith('.md')) {
+              reader.readAsText(file);
+            } else {
+              reader.readAsDataURL(file);
+            }
+          });
+        });
+        
+        const results = await Promise.all(readPromises);
+        fileContents.push(...results);
+      } catch (error) {
+        console.error('Error reading files:', error);
+      }
+    }
     
     try {
       // Call the analysis service
@@ -35,6 +72,7 @@ function App() {
         idea,
         maxPersonas: 5,
         useRealLLM: LLM_CONFIG.enabled, // Currently false, will use mock
+        attachments: fileContents
       });
       
       // Process results first
@@ -55,6 +93,7 @@ function App() {
       setAnalysisResults(analysis.results);
       setHighlightedLocations(locations);
       setFocusLocation(focusPoint);
+      setSelectedFiles([]); // Clear files after analysis
       
       // Auto-open sidebar on first analysis
       if (!isSidebarOpen) {
@@ -153,91 +192,142 @@ function App() {
     <Router>
       <div className="app dark">
         <Navbar onNavigate={navigate} />
-        
         <Routes>
           <Route path="/" element={
-            <section className="relative min-h-screen">
-              <div className="absolute inset-0">
-                <PixelBlast
-                  variant="square"
-                  pixelSize={18}
-                  color="#A3BAF0"
-                  patternScale={2}
-                  patternDensity={0.4}
-                  pixelSizeJitter={0.6}
-                  enableRipples={false}
-                  rippleSpeed={0.4}
-                  rippleThickness={0.12}
-                  rippleIntensityScale={0.6}
-                  liquid={false}
-                  liquidStrength={0.1}
-                  liquidRadius={1.0}
-                  liquidWobbleSpeed={4.5}
-                  speed={0.6}
-                  edgeFade={0.8}
-                  transparent={false}
-                />
+            <section className="min-h-screen pt-16">
+              <div className="fixed inset-0">
+                <HeroBackground />
               </div>
-              <main className="relative z-10 flex items-center justify-center min-h-screen bg-black bg-opacity-50">
+              <main className="relative z-10 flex items-center justify-center min-h-screen">
                 <div className="max-w-4xl mx-auto text-center px-4">
-                  <h1 className="text-4xl font-medium tracking-tight text-balance text-white sm:text-7xl">
-                    AI agents for simulated market research
+                  <div className="relative">
+                    <div className="absolute inset-0 blur-[100px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-full transform -translate-y-1/2"></div>
+                    <h1 className="relative text-4xl font-medium tracking-tight text-balance text-white sm:text-7xl bg-clip-text">
+                      Your startup ideas, tested by Experts
                   </h1>
-                  <p className="text-xl text-gray-300 mb-8">
-                    Get a market analysis in minutes, not months.
+                  </div>
+                  <h2 className="text-2xl text-blue-300/90 mt-6 mb-4 font-light">
+                    Get instant feedback from virtual VCs, developers, and industry leaders worldwide
+                  </h2>
+                  <div className="flex flex-wrap justify-center gap-6 mb-8">
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm">
+                      <span className="text-gray-300">Smart Validation</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm">
+                      <span className="text-gray-300">Expert Insights</span>
+                    </div>
+                    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-sm">
+                      <span className="text-gray-300">Market Signals</span>
+                    </div>
+                  </div>
+                  <p className="text-xl text-gray-400 mb-12">
+                    Turn your idea into validated insights in seconds
                   </p>
-                  <button className="bg-white text-black px-8 py-4 rounded-full font-semibold hover:bg-gray-200 transition-colors text-lg" onClick={() => navigate("/explore")}>
-                    Explore Nexus ↗
+                  <div className="flex flex-col items-center gap-4">
+                    {/* Primary CTA */}
+                    <button 
+                      className="relative group bg-gradient-to-r from-blue-500 to-purple-600 px-8 py-4 rounded-full font-semibold text-lg text-white overflow-hidden transition-all duration-300 hover:shadow-[0_0_30px_-5px] hover:shadow-blue-500/50"
+                      onClick={() => navigate("/explore")}
+                    >
+                      <span className="relative z-10 flex items-center gap-2">
+                        Test My Startup Idea
+                        <svg 
+                          className="w-5 h-5 transition-transform duration-300 transform group-hover:translate-x-1" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" />
+                        </svg>
+                      </span>
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-purple-700 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </button>
+
+                    {/* Secondary CTA */}
+                    <button 
+                      className="group px-6 py-2 text-gray-300 hover:text-white transition-colors duration-300"
+                      onClick={() => {
+                        const demoSection = document.getElementById('how-it-works');
+                        demoSection?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                    >
+                      {/* <span className="flex items-center gap-2">
+                        <svg 
+                          className="w-5 h-5 text-blue-400" 
+                          fill="none" 
+                          stroke="currentColor" 
+                          viewBox="0 0 24 24"
+                        >
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Watch Demo
+                      </span> */}
                   </button>
+
+                    {/* Scroll Indicator */}
+                    {/* <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex flex-col items-center animate-bounce">
+                      <span className="text-gray-400 text-sm mb-2">See How It Works</span>
+                      <svg 
+                        className="w-6 h-6 text-gray-400" 
+                        fill="none" 
+                        stroke="currentColor" 
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                      </svg>
+                    </div> */}
+                  </div>
                 </div>
               </main>
             </section>
           } />
           
           <Route path="/explore" element={
-            <div className="min-h-screen flex flex-col items-center px-8 pb-8 bg-black relative">
-              <div className="mb-6 text-center pt-8">
-                <h2 className="text-3xl font-bold text-white mb-2">Global Expert Network</h2>
-                <p className="text-gray-400">
-                  {isSidebarOpen 
-                    ? "Expert analysis complete - review insights on the right" 
-                    : "Click on any location to explore industry experts or submit your startup idea below"}
-                </p>
-              </div>
-              <div className="w-[500px] h-[400px] flex-shrink-0 flex items-center justify-center mb-8 mx-auto">
-                <MemoWorld
-                  globeConfig={globeConfig}
-                  data={pointsData}
-                  onPointClick={useCallback((position: any) => {
-                    const locationName = position?.name || '';
-                    const personas = getPersonasForLocation(locationName);
-                    if (personas.length > 0) {
-                      setSelectedPersona(personas[0]);
-                      setIsModalOpen(true);
-                      
-                      // Update focus and highlights when clicking globe points
-                      const locationData = locationPoints.find(point => point.name === locationName);
-                      if (locationData) {
-                        setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
-                        // If we have analysis results, highlight those locations
-                        if (analysisResults.length > 0) {
-                          setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
-                        } else {
-                          // Otherwise just highlight the clicked location
-                          setHighlightedLocations([locationName]);
+            <div className="min-h-screen flex flex-col items-center px-8 pb-8 bg-black relative pt-16">
+              <div className="w-full max-w-6xl mx-auto">
+                <div className="mt-8 text-center">
+                  <h2 className="text-3xl font-bold text-white mb-2">Global Expert Network</h2>
+                  <p className="text-gray-400">
+                    {isSidebarOpen 
+                      ? "Expert analysis complete - review insights on the right" 
+                      : "Click on any location to explore industry experts or submit your startup idea below"}
+                  </p>
+                </div>
+                <div className="w-[500px] h-[400px] flex-shrink-0 flex items-center justify-center my-8 mx-auto">
+                  <MemoWorld
+                    globeConfig={globeConfig}
+                    data={pointsData}
+                    onPointClick={useCallback((position: any) => {
+                      const locationName = position?.name || '';
+                      const personas = getPersonasForLocation(locationName);
+                      if (personas.length > 0) {
+                        setSelectedPersona(personas[0]);
+                        setIsModalOpen(true);
+                        
+                        // Update focus and highlights when clicking globe points
+                        const locationData = locationPoints.find(point => point.name === locationName);
+                        if (locationData) {
+                          setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
+                          // If we have analysis results, highlight those locations
+                          if (analysisResults.length > 0) {
+                            setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                          } else {
+                            // Otherwise just highlight the clicked location
+                            setHighlightedLocations([locationName]);
+                          }
                         }
                       }
-                    }
-                  }, [locationPoints, analysisResults])}
+                    }, [locationPoints, analysisResults])}
                 />
               </div>
               
               {/* Chatbox */}
-              <div className="flex justify-center p-4 w-full">
-                <div className={`w-full rounded-2xl bg-gray-900 bg-opacity-85 border border-gray-700 shadow-2xl backdrop-blur-lg ${isSidebarOpen ? 'max-w-xl mr-[400px]' : 'max-w-2xl'}`}>
+                <div className="flex justify-center p-4 w-full max-w-6xl mx-auto -translate-y-[10%]">
+                  <div className={`w-full rounded-2xl bg-gray-900 bg-opacity-85 border border-gray-700 shadow-2xl backdrop-blur-lg ${isSidebarOpen ? 'max-w-xl mr-[400px]' : 'max-w-2xl'}`}>
                   <textarea
                     className="chatbox-input"
-                    placeholder="Describe your startup idea... (e.g., 'An AI-powered fitness app that creates personalized workout plans')"
+                      placeholder="Describe your startup idea... (e.g., 'An AI-powered fitness app that creates personalized workout plans')"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={handleKeyPress}
@@ -245,20 +335,27 @@ function App() {
                   ></textarea>
                   <div className="flex justify-between items-center p-2">
                     <div className="flex items-center gap-2">
-                      <button className="w-9 h-9 flex items-center justify-center text-gray-400 bg-gray-800 border border-gray-600 rounded-full cursor-pointer hover:bg-gray-700" aria-label="Attach">
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        >
-                          <path d="M21.44 11.05l-9.19 9.19a6 6 0 1 1-8.49-8.49l10-10a4 4 0 1 1 5.66 5.66l-10 10a2 2 0 1 1-2.83-2.83l9.19-9.19" />
-                        </svg>
-                      </button>
+                        <FileUpload
+                          selectedFiles={selectedFiles}
+                          onFilesSelected={(files) => {
+                            // Limit total files to 5
+                            const newFiles = [...selectedFiles, ...files];
+                            if (newFiles.length > 5) {
+                              console.warn('Maximum 5 files allowed');
+                              return;
+                            }
+                            // Limit each file to 10MB
+                            const tooLarge = files.some(file => file.size > 10 * 1024 * 1024);
+                            if (tooLarge) {
+                              console.warn('Files must be under 10MB');
+                              return;
+                            }
+                            setSelectedFiles(newFiles);
+                          }}
+                          onRemoveFile={(index) => {
+                            setSelectedFiles(files => files.filter((_, i) => i !== index));
+                          }}
+                        />
                     </div>
                     <div className="flex items-center gap-2">
                       <button className="w-9 h-9 flex items-center justify-center text-gray-400 bg-gray-800 border border-gray-600 rounded-full cursor-pointer hover:bg-gray-700" aria-label="Settings">
@@ -283,7 +380,7 @@ function App() {
                         className={`send-btn${
                           chatInput.trim().length === 0 ? " disabled" : ""
                         }`}
-                        onClick={handleSubmit}
+                          onClick={handleSubmit}
                         disabled={chatInput.trim().length === 0}
                         aria-label="Send"
                       >
@@ -304,42 +401,48 @@ function App() {
                     </div>
                   </div>
                 </div>
+                </div>
+                
+                <PersonaModal
+                  persona={selectedPersona}
+                  isOpen={isModalOpen}
+                  onClose={handleModalClose}
+                />
+
+                {/* Analysis Tab */}
+                <AnalysisTab
+                  isOpen={isSidebarOpen}
+                  hasResults={analysisResults.length > 0}
+                  onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                />
+
+                {/* Results Sidebar */}
+                <ResultsSidebar
+                  isOpen={isSidebarOpen}
+                  onClose={() => setIsSidebarOpen(false)}
+                  startupIdea={startupIdea}
+                  results={analysisResults}
+                  onPersonaClick={(persona) => {
+                    setSelectedPersona(persona);
+                    setIsModalOpen(true);
+
+                    // Update globe focus when clicking persona
+                    const locationName = persona.location.split(',')[0];
+                    const locationData = locationPoints.find(point => point.name === locationName);
+                    if (locationData) {
+                      setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
+                      // Highlight all locations from current analysis
+                      setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                    }
+                  }}
+                  onFocusLocation={(coords, opts) => {
+                    setFocusLocation(coords);
+                    if (opts?.highlight) {
+                      setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                    }
+                  }}
+                />
               </div>
-              
-              <PersonaModal
-                persona={selectedPersona}
-                isOpen={isModalOpen}
-                onClose={handleModalClose}
-              />
-
-              {/* Analysis Tab */}
-              <AnalysisTab
-                isOpen={isSidebarOpen}
-                hasResults={analysisResults.length > 0}
-                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              />
-
-              {/* Results Sidebar */}
-              <ResultsSidebar
-                isOpen={isSidebarOpen}
-                onClose={() => setIsSidebarOpen(false)}
-                startupIdea={startupIdea}
-                results={analysisResults}
-                onPersonaClick={(persona) => {
-                  setSelectedPersona(persona);
-                  setIsModalOpen(true);
-
-                  // Update globe focus when clicking persona
-                  const locationName = persona.location.split(',')[0];
-                  const locationData = locationPoints.find(point => point.name === locationName);
-                  if (locationData) {
-                    setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
-                    // Highlight all locations from current analysis
-                    setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
-                  }
-                } } onFocusLocation={function (coords: { lat: number; lng: number; }, opts?: { highlight?: boolean; spinIntoView?: boolean; }): void {
-                  throw new Error("Function not implemented.");
-                } }              />
             </div>
           } />
           
