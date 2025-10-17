@@ -6,6 +6,7 @@ import { World } from './components/ui/globe'
 import { Mic } from 'lucide-react'
 import PersonaModal from './components/PersonaModal'
 import ResultsSidebar from './components/ResultsSidebar'
+import AnalysisTab from './components/AnalysisTab'
 import type { Persona } from './components/PersonaModal'
 import { getPersonasForLocation, getAllPersonas } from './data/personas'
 import { analyzeStartupIdea, LLM_CONFIG, type PersonaRating } from './services/analysisService'
@@ -36,19 +37,28 @@ function App() {
         useRealLLM: LLM_CONFIG.enabled, // Currently false, will use mock
       });
       
-      setStartupIdea(idea);
-      setAnalysisResults(analysis.results);
-      setIsSidebarOpen(true);
-
-      // Find the highest rated persona's location
+      // Process results first
       const topPersona = analysis.results[0];
+      const locations = analysis.results.map(r => r.persona.location.split(',')[0]);
+      
+      // Find focus location for top persona
+      let focusPoint = null;
       if (topPersona) {
-        // Find the matching location data
         const locationData = locationPoints.find(point => point.name === topPersona.persona.location.split(',')[0]);
         if (locationData) {
-          setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
-          setHighlightedLocations(analysis.results.map(r => r.persona.location.split(',')[0]));
+          focusPoint = { lat: locationData.startLat, lng: locationData.startLng };
         }
+      }
+      
+      // Update all state at once
+      setStartupIdea(idea);
+      setAnalysisResults(analysis.results);
+      setHighlightedLocations(locations);
+      setFocusLocation(focusPoint);
+      
+      // Auto-open sidebar on first analysis
+      if (!isSidebarOpen) {
+        setIsSidebarOpen(true);
       }
       
       console.log("Analysis complete:", {
@@ -123,6 +133,17 @@ function App() {
     handleAnalyzeIdea(chatInput);
   };
 
+  // Clear highlights when closing modal
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setSelectedPersona(null);
+    // Only clear focus/highlights if we don't have analysis results
+    if (analysisResults.length === 0) {
+      setFocusLocation(null);
+      setHighlightedLocations([]);
+    }
+  };
+
   const navigate = (path: string) => {
     window.history.pushState({}, "", path);
     window.dispatchEvent(new PopStateEvent('popstate'));
@@ -193,8 +214,21 @@ function App() {
                     if (personas.length > 0) {
                       setSelectedPersona(personas[0]);
                       setIsModalOpen(true);
+                      
+                      // Update focus and highlights when clicking globe points
+                      const locationData = locationPoints.find(point => point.name === locationName);
+                      if (locationData) {
+                        setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
+                        // If we have analysis results, highlight those locations
+                        if (analysisResults.length > 0) {
+                          setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                        } else {
+                          // Otherwise just highlight the clicked location
+                          setHighlightedLocations([locationName]);
+                        }
+                      }
                     }
-                  }, [])}
+                  }, [locationPoints, analysisResults])}
                 />
               </div>
               
@@ -275,12 +309,17 @@ function App() {
               <PersonaModal
                 persona={selectedPersona}
                 isOpen={isModalOpen}
-                onClose={() => {
-                  setIsModalOpen(false);
-                  setSelectedPersona(null);
-                }}
+                onClose={handleModalClose}
               />
 
+              {/* Analysis Tab */}
+              <AnalysisTab
+                isOpen={isSidebarOpen}
+                hasResults={analysisResults.length > 0}
+                onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              />
+
+              {/* Results Sidebar */}
               <ResultsSidebar
                 isOpen={isSidebarOpen}
                 onClose={() => setIsSidebarOpen(false)}
@@ -289,8 +328,18 @@ function App() {
                 onPersonaClick={(persona) => {
                   setSelectedPersona(persona);
                   setIsModalOpen(true);
-                }}
-              />
+
+                  // Update globe focus when clicking persona
+                  const locationName = persona.location.split(',')[0];
+                  const locationData = locationPoints.find(point => point.name === locationName);
+                  if (locationData) {
+                    setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
+                    // Highlight all locations from current analysis
+                    setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                  }
+                } } onFocusLocation={function (coords: { lat: number; lng: number; }, opts?: { highlight?: boolean; spinIntoView?: boolean; }): void {
+                  throw new Error("Function not implemented.");
+                } }              />
             </div>
           } />
           
