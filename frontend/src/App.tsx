@@ -25,9 +25,11 @@ function App() {
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [focusLocation, setFocusLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [highlightedLocations, setHighlightedLocations] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Analyze startup idea using the analysis service
   const handleAnalyzeIdea = async (idea: string) => {
+    setIsLoading(true);
     const allPersonas = getAllPersonas();
     
     // Process attached files if any
@@ -100,6 +102,7 @@ function App() {
         setIsSidebarOpen(true);
       }
       
+      setIsLoading(false);
       console.log("Analysis complete:", {
         idea,
         personasSelected: analysis.results.map(r => r.persona.name),
@@ -110,6 +113,7 @@ function App() {
       
     } catch (error) {
       console.error("Analysis failed:", error);
+      setIsLoading(false);
       // Could show an error message to user here
     }
   };
@@ -137,7 +141,7 @@ function App() {
     directionalLeftLight: '#9fb5ff',
     directionalTopLight: '#9fb5ff',
     pointLight: '#9fb5ff',
-    autoRotate: true,
+    autoRotate: false,
     focusPoint: focusLocation || undefined,
     highlightedPoints: highlightedLocations,
   }), [focusLocation, highlightedLocations]);
@@ -326,7 +330,8 @@ function App() {
                 <div className="flex justify-center p-4 w-full max-w-6xl mx-auto -translate-y-[10%]">
                   <div className={`w-full rounded-2xl bg-gray-900 bg-opacity-85 border border-gray-700 shadow-2xl backdrop-blur-lg ${isSidebarOpen ? 'max-w-xl mr-[400px]' : 'max-w-2xl'}`}>
                   <textarea
-                    className="chatbox-input"
+                    className={`chatbox-input ${isLoading ? 'opacity-50' : ''}`}
+                    disabled={isLoading}
                       placeholder="Describe your startup idea... (e.g., 'An AI-powered fitness app that creates personalized workout plans')"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
@@ -376,28 +381,32 @@ function App() {
                       <button className="w-9 h-9 flex items-center justify-center text-gray-400 bg-gray-800 border border-gray-600 rounded-full cursor-pointer hover:bg-gray-700" aria-label="Voice input">
                         <Mic size={18} />
                       </button>
-                      <button
-                        className={`send-btn${
-                          chatInput.trim().length === 0 ? " disabled" : ""
-                        }`}
+                        <button
+                          className={`send-btn${
+                            chatInput.trim().length === 0 ? " disabled" : ""
+                          }`}
                           onClick={handleSubmit}
-                        disabled={chatInput.trim().length === 0}
-                        aria-label="Send"
-                      >
-                        <svg
-                          width="18"
-                          height="18"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
+                          disabled={chatInput.trim().length === 0 || isLoading}
+                          aria-label="Send"
                         >
-                          <path d="M22 2L11 13" />
-                          <path d="M22 2l-7 20-4-9-9-4 20-7z" />
-                        </svg>
-                      </button>
+                          {isLoading ? (
+                            <div className="animate-spin rounded-full h-5 w-5 border-2 border-gray-300 border-t-white" />
+                          ) : (
+                            <svg
+                              width="18"
+                              height="18"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M22 2L11 13" />
+                              <path d="M22 2l-7 20-4-9-9-4 20-7z" />
+                            </svg>
+                          )}
+                        </button>
                     </div>
                   </div>
                 </div>
@@ -422,7 +431,7 @@ function App() {
                   onClose={() => setIsSidebarOpen(false)}
                   startupIdea={startupIdea}
                   results={analysisResults}
-                  onPersonaClick={(persona) => {
+                  onPersonaClick={useCallback((persona) => {
                     setSelectedPersona(persona);
                     setIsModalOpen(true);
 
@@ -432,15 +441,19 @@ function App() {
                     if (locationData) {
                       setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
                       // Highlight all locations from current analysis
-                      setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                      if (analysisResults.length > 0) {
+                        setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
+                      } else {
+                        setHighlightedLocations([locationName]);
+                      }
                     }
-                  }}
-                  onFocusLocation={(coords, opts) => {
+                  }, [locationPoints, analysisResults])}
+                  onFocusLocation={useCallback((coords, opts) => {
                     setFocusLocation(coords);
-                    if (opts?.highlight) {
+                    if (opts?.highlight && analysisResults.length > 0) {
                       setHighlightedLocations(analysisResults.map(r => r.persona.location.split(',')[0]));
                     }
-                  }}
+                  }, [analysisResults])}
                 />
               </div>
             </div>
