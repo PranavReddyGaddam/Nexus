@@ -24,3 +24,8 @@ check:
 anvay:
 	git push origin anvay
 
+main:
+	git checkout main
+	git branch
+	git pull
+	git checkout anvay

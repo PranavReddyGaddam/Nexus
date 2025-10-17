@@ -12,6 +12,10 @@ export interface AnalysisRequest {
   idea: string;
   maxPersonas?: number;
   useRealLLM?: boolean; // Toggle between mock and real LLM
+  attachments?: Array<{
+    name: string;
+    content: string;
+  }>;
 }
 
 export interface AnalysisResponse {
@@ -28,7 +32,7 @@ export interface AnalysisResponse {
  * Mock implementation - randomly selects personas and generates ratings
  * This simulates what the LLM would do
  */
-function mockAnalysis(allPersonas: Persona[], idea: string, maxPersonas: number = 5): PersonaRating[] {
+function mockAnalysis(allPersonas: Persona[], _idea: string, maxPersonas: number = 5): PersonaRating[] {
   // Randomly shuffle and select personas
   const shuffled = [...allPersonas].sort(() => Math.random() - 0.5);
   const selectedPersonas = shuffled.slice(0, Math.min(maxPersonas, allPersonas.length));
