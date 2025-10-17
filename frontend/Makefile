@@ -12,3 +12,12 @@ test:
 
 deploy:
 	npm run deploy
+
+
+check:
+	git status
+	git branch
+
+anvay:
+	git push origin anvay
+

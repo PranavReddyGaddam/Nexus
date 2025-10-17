@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Color, Scene, Fog, PerspectiveCamera, Vector3, Group, Raycaster, Vector2 } from "three";
 import ThreeGlobe from "three-globe";
 import { useThree, Canvas } from "@react-three/fiber";
@@ -48,6 +48,11 @@ export type GlobeConfig = {
   };
   autoRotate?: boolean;
   autoRotateSpeed?: number;
+  highlightedPoints?: string[];  // Names of points to highlight
+  focusPoint?: {               // Point to rotate to
+    lat: number;
+    lng: number;
+  };
 };
 
 interface WorldProps {
@@ -58,7 +63,7 @@ interface WorldProps {
 
 // rings index cache is generated per interval; no static cache needed
 
-export function Globe({ globeConfig, data, onPointClick }: WorldProps) {
+export const Globe = React.memo(function Globe({ globeConfig, data, onPointClick }: WorldProps) {
   const globeRef = useRef<ThreeGlobe | null>(null);
   const groupRef = useRef<Group | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
@@ -187,10 +192,20 @@ export function Globe({ globeConfig, data, onPointClick }: WorldProps) {
 
     globeRef.current
       .pointsData(filteredPoints)
-      .pointColor((e) => ((e as any).importance ?? 0) > 0 ? '#e6efff' : '#95aaff')
+      .pointColor((e: any) => {
+        const isHighlighted = globeConfig.highlightedPoints?.includes(e.name);
+        if (isHighlighted) return '#ffeb3b'; // Bright yellow for highlighted points
+        return ((e.importance ?? 0) > 0 ? '#e6efff' : '#95aaff');
+      })
       .pointsMerge(false) // Don't merge so we can click individual points
-      .pointAltitude((e) => (((e as any).importance ?? 0) > 0 ? 0.01 : 0.005))
-      .pointRadius((e) => (((e as any).importance ?? 0) > 0 ? 1.2 : 0.8)) // Smaller dots
+      .pointAltitude((e: any) => {
+        const isHighlighted = globeConfig.highlightedPoints?.includes(e.name);
+        return isHighlighted ? 0.02 : (((e.importance ?? 0) > 0 ? 0.01 : 0.005));
+      })
+      .pointRadius((e: any) => {
+        const isHighlighted = globeConfig.highlightedPoints?.includes(e.name);
+        return isHighlighted ? 2.0 : (((e.importance ?? 0) > 0 ? 1.2 : 0.8));
+      })
 
     globeRef.current
       .ringsData([])
@@ -343,7 +358,7 @@ export function Globe({ globeConfig, data, onPointClick }: WorldProps) {
   }, [gl, camera, onPointClick, data, isInitialized]);
 
   return <group ref={groupRef} />;
-}
+});
 
 export function WebGLRendererConfig() {
   const { gl, size } = useThree();
@@ -357,10 +372,61 @@ export function WebGLRendererConfig() {
   return null;
 }
 
-export function World(props: WorldProps) {
+export const World = React.memo(function World(props: WorldProps) {
   const { globeConfig } = props;
   const scene = new Scene();
   scene.fog = new Fog(0xffffff, 400, 2000);
+  const controlsRef = useRef<any>(null);
+
+  // Handle focusing on a point
+  useEffect(() => {
+    if (controlsRef.current && globeConfig.focusPoint) {
+      const { lat, lng } = globeConfig.focusPoint;
+      
+      // Convert lat/lng to Euler rotation
+      const phi = (90 - lat) * (Math.PI / 180);
+      const theta = (90 - lng) * (Math.PI / 180);
+      
+      // Stop auto-rotation temporarily
+      controlsRef.current.autoRotate = false;
+      
+      // Animate to the new position
+      const targetRotation = {
+        x: phi,
+        y: theta,
+      };
+      
+      // Simple animation
+      const startRotation = {
+        x: controlsRef.current.getPolarAngle(),
+        y: controlsRef.current.getAzimuthalAngle(),
+      };
+      
+      let start: number | null = null;
+      const duration = 1000; // 1 second animation
+      
+      function animate(timestamp: number) {
+        if (!start) start = timestamp;
+        const progress = (timestamp - start) / duration;
+        
+        if (progress < 1) {
+          controlsRef.current.setAzimuthalAngle(
+            startRotation.y + (targetRotation.y - startRotation.y) * progress
+          );
+          controlsRef.current.setPolarAngle(
+            startRotation.x + (targetRotation.x - startRotation.x) * progress
+          );
+          requestAnimationFrame(animate);
+        } else {
+          // Animation complete, resume auto-rotation
+          controlsRef.current.autoRotate = true;
+        }
+      }
+      
+      requestAnimationFrame(animate);
+    }
+  }, [globeConfig.focusPoint]);
+
   return (
     <Canvas scene={scene} camera={new PerspectiveCamera(50, aspect, 180, 1800)}>
       <WebGLRendererConfig />
@@ -380,6 +446,7 @@ export function World(props: WorldProps) {
       />
       <Globe {...props} />
       <OrbitControls
+        ref={controlsRef}
         enablePan={false}
         enableZoom={false}
         minDistance={cameraZ}
@@ -391,7 +458,7 @@ export function World(props: WorldProps) {
       />
     </Canvas>
   );
-}
+});
 
 export function hexToRgb(hex: string) {
   var shorthandRegex = /^#?([a-f\d])([a-f\d])([a-f\d])$/i;
