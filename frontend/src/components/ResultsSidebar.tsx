@@ -75,7 +75,7 @@ export default function ResultsSidebar({
     return isOpen ? (
       <div 
         className={`
-          fixed right-0 top-0 bottom-0 z-40
+          fixed right-0 top-16 bottom-0 z-40
           w-96 bg-gray-900 border-l border-gray-700 shadow-2xl
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : 'translate-x-full'}
