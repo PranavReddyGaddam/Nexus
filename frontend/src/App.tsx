@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useMemo, useCallback, memo } from "react";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar'
 import PixelBlast from './PixelBlast/PixelBlast'
@@ -8,13 +8,10 @@ import PersonaModal from './components/PersonaModal'
 import ResultsSidebar from './components/ResultsSidebar'
 import type { Persona } from './components/PersonaModal'
 import { getPersonasForLocation, getAllPersonas } from './data/personas'
+import { analyzeStartupIdea, LLM_CONFIG, type PersonaRating } from './services/analysisService'
 
-interface PersonaRating {
-  persona: Persona;
-  rating: number;
-  sentiment: 'positive' | 'neutral' | 'cautious';
-  keyInsight: string;
-}
+// Wrap World so it won't re-render unless its props change
+const MemoWorld = memo(World);
 
 function App() {
   const [chatInput, setChatInput] = useState("");
@@ -23,47 +20,49 @@ function App() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [startupIdea, setStartupIdea] = useState("");
   const [analysisResults, setAnalysisResults] = useState<PersonaRating[]>([]);
+  const [focusLocation, setFocusLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [highlightedLocations, setHighlightedLocations] = useState<string[]>([]);
 
-  // Simulate persona selection and rating based on startup idea keywords
-  const analyzeIdea = (idea: string) => {
-    const ideaLower = idea.toLowerCase();
+  // Analyze startup idea using the analysis service
+  const handleAnalyzeIdea = async (idea: string) => {
     const allPersonas = getAllPersonas();
     
-    // Simple keyword matching to select relevant personas
-    const relevantPersonas = allPersonas.filter(persona => {
-      const industryMatch = persona.industry.toLowerCase().split(' ').some(word => 
-        ideaLower.includes(word.toLowerCase())
-      );
-      const expertiseMatch = persona.expertise.some(exp => 
-        ideaLower.includes(exp.toLowerCase().split(' ')[0])
-      );
-      return industryMatch || expertiseMatch;
-    });
-
-    // If no matches, select random 3-5 personas
-    const selectedPersonas = relevantPersonas.length > 0 
-      ? relevantPersonas.slice(0, 5)
-      : allPersonas.sort(() => Math.random() - 0.5).slice(0, 4);
-
-    // Generate sample ratings for each persona
-    const results: PersonaRating[] = selectedPersonas.map(persona => {
-      const rating = Math.floor(Math.random() * 4) + 6; // 6-10 range
-      const sentiment = rating >= 8 ? 'positive' : rating >= 6 ? 'neutral' : 'cautious';
+    try {
+      // Call the analysis service
+      // Set useRealLLM to true when your backend is ready
+      const analysis = await analyzeStartupIdea(allPersonas, {
+        idea,
+        maxPersonas: 5,
+        useRealLLM: LLM_CONFIG.enabled, // Currently false, will use mock
+      });
       
-      // Pick a random insight from their insights array
-      const keyInsight = persona.insights && persona.insights.length > 0
-        ? persona.insights[Math.floor(Math.random() * persona.insights.length)]
-        : `Based on ${persona.experience} in ${persona.industry}, this shows potential.`;
+      setStartupIdea(idea);
+      setAnalysisResults(analysis.results);
+      setIsSidebarOpen(true);
 
-      return {
-        persona,
-        rating,
-        sentiment,
-        keyInsight
-      };
-    });
-
-    return results.sort((a, b) => b.rating - a.rating); // Sort by rating descending
+      // Find the highest rated persona's location
+      const topPersona = analysis.results[0];
+      if (topPersona) {
+        // Find the matching location data
+        const locationData = locationPoints.find(point => point.name === topPersona.persona.location.split(',')[0]);
+        if (locationData) {
+          setFocusLocation({ lat: locationData.startLat, lng: locationData.startLng });
+          setHighlightedLocations(analysis.results.map(r => r.persona.location.split(',')[0]));
+        }
+      }
+      
+      console.log("Analysis complete:", {
+        idea,
+        personasSelected: analysis.results.map(r => r.persona.name),
+        averageRating: analysis.summary.averageRating,
+        sentiment: analysis.summary.overallSentiment,
+        usingLLM: LLM_CONFIG.enabled,
+      });
+      
+    } catch (error) {
+      console.error("Analysis failed:", error);
+      // Could show an error message to user here
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -71,29 +70,57 @@ function App() {
       e.preventDefault();
       if (chatInput.trim().length === 0) return;
       
-      // Analyze the startup idea
-      const results = analyzeIdea(chatInput);
-      setStartupIdea(chatInput);
-      setAnalysisResults(results);
-      setIsSidebarOpen(true);
-      
-      console.log("Analyzing idea:", chatInput);
-      console.log("Selected personas:", results.map(r => r.persona.name));
+      handleAnalyzeIdea(chatInput);
       
       // Don't clear input immediately so user can see what they submitted
       // setChatInput("");
     }
   };
 
+  // Stable globe config (only changes when focus/highlights change)
+  const globeConfig = useMemo(() => ({
+    globeColor: '#0b0b0f',
+    atmosphereColor: '#7aa2ff',
+    showAtmosphere: true,
+    atmosphereAltitude: 0.22,
+    polygonColor: 'rgba(180,200,255,0.55)',
+    ambientLight: '#ffffff',
+    directionalLeftLight: '#9fb5ff',
+    directionalTopLight: '#9fb5ff',
+    pointLight: '#9fb5ff',
+    autoRotate: true,
+    focusPoint: focusLocation || undefined,
+    highlightedPoints: highlightedLocations,
+  }), [focusLocation, highlightedLocations]);
+
+  // Stable data array
+  const pointsData = useMemo(() => ([
+    { order: 0,  startLat: 40.7128,  startLng: -74.0060,  endLat: 40.7128,  endLng: -74.0060,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'New York' },
+    { order: 1,  startLat: 51.5074,  startLng: -0.1278,   endLat: 51.5074,  endLng: -0.1278,   arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'London' },
+    { order: 2,  startLat: 35.6895,  startLng: 139.6917,  endLat: 35.6895,  endLng: 139.6917,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Tokyo' },
+    { order: 3,  startLat: 22.3193,  startLng: 114.1694,  endLat: 22.3193,  endLng: 114.1694,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Hong Kong' },
+    { order: 4,  startLat: 1.3521,   startLng: 103.8198,  endLat: 1.3521,   endLng: 103.8198,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Singapore' },
+    { order: 5,  startLat: 31.2304,  startLng: 121.4737,  endLat: 31.2304,  endLng: 121.4737,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Shanghai' },
+    { order: 6,  startLat: 50.1109,  startLng: 8.6821,    endLat: 50.1109,  endLng: 8.6821,    arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Frankfurt' },
+    { order: 7,  startLat: 48.8566,  startLng: 2.3522,    endLat: 48.8566,  endLng: 2.3522,    arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Paris' },
+    { order: 8,  startLat: 47.3769,  startLng: 8.5417,    endLat: 47.3769,  endLng: 8.5417,    arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Zurich' },
+    { order: 9,  startLat: 43.6532,  startLng: -79.3832,  endLat: 43.6532,  endLng: -79.3832,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Toronto' },
+    { order: 10, startLat: -33.8688, startLng: 151.2093,  endLat: -33.8688, endLng: 151.2093,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Sydney' },
+    { order: 11, startLat: 19.0760,  startLng: 72.8777,   endLat: 19.0760,  endLng: 72.8777,   arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Mumbai' },
+    { order: 12, startLat: 25.276987,startLng: 55.296249, endLat: 25.276987,endLng: 55.296249, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Dubai' },
+    { order: 13, startLat: 37.5665,  startLng: 126.9780,  endLat: 37.5665,  endLng: 126.9780,  arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Seoul' },
+  ]), []); // never changes
+
+  // Store location points for easy access (for analysis results)
+  const locationPoints = useMemo(() => pointsData.map(point => ({
+    name: point.name,
+    startLat: point.startLat,
+    startLng: point.startLng,
+  })), []);
+
   const handleSubmit = () => {
     if (chatInput.trim().length === 0) return;
-    
-    const results = analyzeIdea(chatInput);
-    setStartupIdea(chatInput);
-    setAnalysisResults(results);
-    setIsSidebarOpen(true);
-    
-    console.log("Analyzing idea:", chatInput);
+    handleAnalyzeIdea(chatInput);
   };
 
   const navigate = (path: string) => {
@@ -157,44 +184,17 @@ function App() {
                 </p>
               </div>
               <div className="w-[500px] h-[400px] flex-shrink-0 flex items-center justify-center mb-8 mx-auto">
-                <World
-                  globeConfig={{
-                    globeColor: '#0b0b0f',
-                    atmosphereColor: '#7aa2ff',
-                    showAtmosphere: true,
-                    atmosphereAltitude: 0.22,
-                    polygonColor: 'rgba(180,200,255,0.55)',
-                    ambientLight: '#ffffff',
-                    directionalLeftLight: '#9fb5ff',
-                    directionalTopLight: '#9fb5ff',
-                    pointLight: '#9fb5ff',
-                    autoRotate: true,
-                  }}
-                  data={[
-                    // Financial hubs data - names must match personas.ts exactly
-                    { order: 0, startLat: 40.7128, startLng: -74.0060, endLat: 40.7128, endLng: -74.0060, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'New York' },
-                    { order: 1, startLat: 51.5074, startLng: -0.1278, endLat: 51.5074, endLng: -0.1278, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'London' },
-                    { order: 2, startLat: 35.6895, startLng: 139.6917, endLat: 35.6895, endLng: 139.6917, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Tokyo' },
-                    { order: 3, startLat: 22.3193, startLng: 114.1694, endLat: 22.3193, endLng: 114.1694, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Hong Kong' },
-                    { order: 4, startLat: 1.3521, startLng: 103.8198, endLat: 1.3521, endLng: 103.8198, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Singapore' },
-                    { order: 5, startLat: 31.2304, startLng: 121.4737, endLat: 31.2304, endLng: 121.4737, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Shanghai' },
-                    { order: 6, startLat: 50.1109, startLng: 8.6821, endLat: 50.1109, endLng: 8.6821, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Frankfurt' },
-                    { order: 7, startLat: 48.8566, startLng: 2.3522, endLat: 48.8566, endLng: 2.3522, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Paris' },
-                    { order: 8, startLat: 47.3769, startLng: 8.5417, endLat: 47.3769, endLng: 8.5417, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Zurich' },
-                    { order: 9, startLat: 43.6532, startLng: -79.3832, endLat: 43.6532, endLng: -79.3832, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Toronto' },
-                    { order: 10, startLat: -33.8688, startLng: 151.2093, endLat: -33.8688, endLng: 151.2093, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Sydney' },
-                    { order: 11, startLat: 19.0760, startLng: 72.8777, endLat: 19.0760, endLng: 72.8777, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Mumbai' },
-                    { order: 12, startLat: 25.276987, startLng: 55.296249, endLat: 25.276987, endLng: 55.296249, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Dubai' },
-                    { order: 13, startLat: 37.5665, startLng: 126.9780, endLat: 37.5665, endLng: 126.9780, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Seoul' },
-                  ]}
-                  onPointClick={(position) => {
-                    const locationName = position.name || '';
+                <MemoWorld
+                  globeConfig={globeConfig}
+                  data={pointsData}
+                  onPointClick={useCallback((position: any) => {
+                    const locationName = position?.name || '';
                     const personas = getPersonasForLocation(locationName);
                     if (personas.length > 0) {
-                      setSelectedPersona(personas[0]); // Show first persona, can be enhanced to show all
+                      setSelectedPersona(personas[0]);
                       setIsModalOpen(true);
                     }
-                  }}
+                  }, [])}
                 />
               </div>
               
