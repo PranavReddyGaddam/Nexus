@@ -4,17 +4,96 @@ import Navbar from './components/Navbar'
 import PixelBlast from './PixelBlast/PixelBlast'
 import { World } from './components/ui/globe'
 import { Mic } from 'lucide-react'
+import PersonaModal from './components/PersonaModal'
+import ResultsSidebar from './components/ResultsSidebar'
+import type { Persona } from './components/PersonaModal'
+import { getPersonasForLocation, getAllPersonas } from './data/personas'
+
+interface PersonaRating {
+  persona: Persona;
+  rating: number;
+  sentiment: 'positive' | 'neutral' | 'cautious';
+  keyInsight: string;
+}
 
 function App() {
   const [chatInput, setChatInput] = useState("");
+  const [selectedPersona, setSelectedPersona] = useState<Persona | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [startupIdea, setStartupIdea] = useState("");
+  const [analysisResults, setAnalysisResults] = useState<PersonaRating[]>([]);
+
+  // Simulate persona selection and rating based on startup idea keywords
+  const analyzeIdea = (idea: string) => {
+    const ideaLower = idea.toLowerCase();
+    const allPersonas = getAllPersonas();
+    
+    // Simple keyword matching to select relevant personas
+    const relevantPersonas = allPersonas.filter(persona => {
+      const industryMatch = persona.industry.toLowerCase().split(' ').some(word => 
+        ideaLower.includes(word.toLowerCase())
+      );
+      const expertiseMatch = persona.expertise.some(exp => 
+        ideaLower.includes(exp.toLowerCase().split(' ')[0])
+      );
+      return industryMatch || expertiseMatch;
+    });
+
+    // If no matches, select random 3-5 personas
+    const selectedPersonas = relevantPersonas.length > 0 
+      ? relevantPersonas.slice(0, 5)
+      : allPersonas.sort(() => Math.random() - 0.5).slice(0, 4);
+
+    // Generate sample ratings for each persona
+    const results: PersonaRating[] = selectedPersonas.map(persona => {
+      const rating = Math.floor(Math.random() * 4) + 6; // 6-10 range
+      const sentiment = rating >= 8 ? 'positive' : rating >= 6 ? 'neutral' : 'cautious';
+      
+      // Pick a random insight from their insights array
+      const keyInsight = persona.insights && persona.insights.length > 0
+        ? persona.insights[Math.floor(Math.random() * persona.insights.length)]
+        : `Based on ${persona.experience} in ${persona.industry}, this shows potential.`;
+
+      return {
+        persona,
+        rating,
+        sentiment,
+        keyInsight
+      };
+    });
+
+    return results.sort((a, b) => b.rating - a.rating); // Sort by rating descending
+  };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       if (chatInput.trim().length === 0) return;
-      console.log("Message sent:", chatInput);
-      setChatInput("");
+      
+      // Analyze the startup idea
+      const results = analyzeIdea(chatInput);
+      setStartupIdea(chatInput);
+      setAnalysisResults(results);
+      setIsSidebarOpen(true);
+      
+      console.log("Analyzing idea:", chatInput);
+      console.log("Selected personas:", results.map(r => r.persona.name));
+      
+      // Don't clear input immediately so user can see what they submitted
+      // setChatInput("");
     }
+  };
+
+  const handleSubmit = () => {
+    if (chatInput.trim().length === 0) return;
+    
+    const results = analyzeIdea(chatInput);
+    setStartupIdea(chatInput);
+    setAnalysisResults(results);
+    setIsSidebarOpen(true);
+    
+    console.log("Analyzing idea:", chatInput);
   };
 
   const navigate = (path: string) => {
@@ -68,8 +147,16 @@ function App() {
           } />
           
           <Route path="/explore" element={
-            <div className="min-h-screen flex flex-col items-center justify-center p-8 bg-black">
-              <div className="w-full max-w-4xl h-96 flex items-center justify-center mb-8">
+            <div className="min-h-screen flex flex-col items-center px-8 pb-8 bg-black relative">
+              <div className="mb-6 text-center pt-8">
+                <h2 className="text-3xl font-bold text-white mb-2">Global Expert Network</h2>
+                <p className="text-gray-400">
+                  {isSidebarOpen 
+                    ? "Expert analysis complete - review insights on the right" 
+                    : "Click on any location to explore industry experts or submit your startup idea below"}
+                </p>
+              </div>
+              <div className="w-[500px] h-[400px] flex-shrink-0 flex items-center justify-center mb-8 mx-auto">
                 <World
                   globeConfig={{
                     globeColor: '#0b0b0f',
@@ -84,7 +171,7 @@ function App() {
                     autoRotate: true,
                   }}
                   data={[
-                    // Financial hubs data
+                    // Financial hubs data - names must match personas.ts exactly
                     { order: 0, startLat: 40.7128, startLng: -74.0060, endLat: 40.7128, endLng: -74.0060, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'New York' },
                     { order: 1, startLat: 51.5074, startLng: -0.1278, endLat: 51.5074, endLng: -0.1278, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'London' },
                     { order: 2, startLat: 35.6895, startLng: 139.6917, endLat: 35.6895, endLng: 139.6917, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Tokyo' },
@@ -100,15 +187,23 @@ function App() {
                     { order: 12, startLat: 25.276987, startLng: 55.296249, endLat: 25.276987, endLng: 55.296249, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Dubai' },
                     { order: 13, startLat: 37.5665, startLng: 126.9780, endLat: 37.5665, endLng: 126.9780, arcAlt: 0, color: '#8aa0ff', importance: 1, name: 'Seoul' },
                   ]}
+                  onPointClick={(position) => {
+                    const locationName = position.name || '';
+                    const personas = getPersonasForLocation(locationName);
+                    if (personas.length > 0) {
+                      setSelectedPersona(personas[0]); // Show first persona, can be enhanced to show all
+                      setIsModalOpen(true);
+                    }
+                  }}
                 />
               </div>
               
               {/* Chatbox */}
               <div className="flex justify-center p-4 w-full">
-                <div className="w-full max-w-2xl rounded-2xl bg-gray-900 bg-opacity-85 border border-gray-700 shadow-2xl backdrop-blur-lg">
+                <div className={`w-full rounded-2xl bg-gray-900 bg-opacity-85 border border-gray-700 shadow-2xl backdrop-blur-lg ${isSidebarOpen ? 'max-w-xl mr-[400px]' : 'max-w-2xl'}`}>
                   <textarea
                     className="chatbox-input"
-                    placeholder="Build me a game where..."
+                    placeholder="Describe your startup idea... (e.g., 'An AI-powered fitness app that creates personalized workout plans')"
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyPress={handleKeyPress}
@@ -154,11 +249,7 @@ function App() {
                         className={`send-btn${
                           chatInput.trim().length === 0 ? " disabled" : ""
                         }`}
-                        onClick={() => {
-                          if (chatInput.trim().length === 0) return;
-                          console.log("Message sent:", chatInput);
-                          setChatInput("");
-                        }}
+                        onClick={handleSubmit}
                         disabled={chatInput.trim().length === 0}
                         aria-label="Send"
                       >
@@ -180,6 +271,26 @@ function App() {
                   </div>
                 </div>
               </div>
+              
+              <PersonaModal
+                persona={selectedPersona}
+                isOpen={isModalOpen}
+                onClose={() => {
+                  setIsModalOpen(false);
+                  setSelectedPersona(null);
+                }}
+              />
+
+              <ResultsSidebar
+                isOpen={isSidebarOpen}
+                onClose={() => setIsSidebarOpen(false)}
+                startupIdea={startupIdea}
+                results={analysisResults}
+                onPersonaClick={(persona) => {
+                  setSelectedPersona(persona);
+                  setIsModalOpen(true);
+                }}
+              />
             </div>
           } />
           

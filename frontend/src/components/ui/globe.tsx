@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Color, Scene, Fog, PerspectiveCamera, Vector3, Group } from "three";
+import { Color, Scene, Fog, PerspectiveCamera, Vector3, Group, Raycaster, Vector2 } from "three";
 import ThreeGlobe from "three-globe";
 import { useThree, Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
@@ -53,14 +53,16 @@ export type GlobeConfig = {
 interface WorldProps {
   globeConfig: GlobeConfig;
   data: Position[];
+  onPointClick?: (position: Position) => void;
 }
 
 // rings index cache is generated per interval; no static cache needed
 
-export function Globe({ globeConfig, data }: WorldProps) {
+export function Globe({ globeConfig, data, onPointClick }: WorldProps) {
   const globeRef = useRef<ThreeGlobe | null>(null);
   const groupRef = useRef<Group | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
+  const { camera, gl } = useThree();
 
   const defaultProps = {
     pointSize: 1,
@@ -123,11 +125,12 @@ export function Globe({ globeConfig, data }: WorldProps) {
       lat: number;
       lng: number;
       importance?: number;
-  /** optional name for the location */
-  name?: string;    }> = [];
+      name?: string;
+    }> = [];
     for (let i = 0; i < arcs.length; i++) {
       const arc = arcs[i];
       const importance = (arc as any).importance ?? 0;
+      const name = (arc as any).name;
       points.push({
         size: defaultProps.pointSize,
         order: arc.order,
@@ -135,6 +138,7 @@ export function Globe({ globeConfig, data }: WorldProps) {
         lat: arc.startLat,
         lng: arc.startLng,
         importance,
+        name,
       });
       points.push({
         size: defaultProps.pointSize,
@@ -143,6 +147,7 @@ export function Globe({ globeConfig, data }: WorldProps) {
         lat: arc.endLat,
         lng: arc.endLng,
         importance,
+        name,
       });
     }
 
@@ -183,9 +188,9 @@ export function Globe({ globeConfig, data }: WorldProps) {
     globeRef.current
       .pointsData(filteredPoints)
       .pointColor((e) => ((e as any).importance ?? 0) > 0 ? '#e6efff' : '#95aaff')
-      .pointsMerge(true)
-      .pointAltitude((e) => (((e as any).importance ?? 0) > 0 ? 0.006 : 0.002))
-      .pointRadius((e) => (((e as any).importance ?? 0) > 0 ? 1.6 : 1.2))
+      .pointsMerge(false) // Don't merge so we can click individual points
+      .pointAltitude((e) => (((e as any).importance ?? 0) > 0 ? 0.01 : 0.005))
+      .pointRadius((e) => (((e as any).importance ?? 0) > 0 ? 1.2 : 0.8)) // Smaller dots
 
     globeRef.current
       .ringsData([])
@@ -240,6 +245,102 @@ export function Globe({ globeConfig, data }: WorldProps) {
       clearInterval(interval);
     };
   }, [isInitialized, data]);
+
+  // Handle clicks on the globe - improved to detect points accurately
+  useEffect(() => {
+    if (!gl || !onPointClick || !isInitialized || !globeRef.current) return;
+
+    const handleClick = (event: MouseEvent) => {
+      // Calculate mouse position in normalized device coordinates
+      const rect = gl.domElement.getBoundingClientRect();
+      const mouse = new Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+
+      // Create raycaster with larger threshold for easier clicking
+      const raycaster = new Raycaster();
+      raycaster.params.Points = { threshold: 5 }; // Larger threshold for easier clicking
+      raycaster.setFromCamera(mouse, camera);
+
+      if (!groupRef.current) return;
+
+      // First, try to find point objects specifically
+      const pointObjects = groupRef.current.children.filter(
+        (child) => child.type === 'Points' || child.type === 'Mesh'
+      );
+      
+      const pointIntersects = raycaster.intersectObjects(pointObjects, true);
+      
+      // If we hit a point object, try to match it to our data
+      if (pointIntersects.length > 0) {
+        const hitPoint = pointIntersects[0].point;
+        
+        // Convert hit point to lat/lng
+        const radius = 100;
+        const lat = Math.asin(hitPoint.y / radius) * (180 / Math.PI);
+        const lng = Math.atan2(hitPoint.z, hitPoint.x) * (180 / Math.PI);
+        
+        // Find closest data point
+        let closestPoint = null;
+        let closestDistance = Infinity;
+        
+        for (const dataPoint of data) {
+          const distance = Math.sqrt(
+            Math.pow(dataPoint.startLat - lat, 2) + 
+            Math.pow(dataPoint.startLng - lng, 2)
+          );
+          
+          if (distance < closestDistance && distance < 15) {
+            closestDistance = distance;
+            closestPoint = dataPoint;
+          }
+        }
+        
+        if (closestPoint) {
+          console.log('Clicked on:', closestPoint.name, 'at', closestPoint.startLat, closestPoint.startLng);
+          onPointClick(closestPoint);
+          return;
+        }
+      }
+      
+      // Fallback: check all objects if no point was directly hit
+      const allIntersects = raycaster.intersectObjects(groupRef.current.children, true);
+      if (allIntersects.length > 0) {
+        const hitPoint = allIntersects[0].point;
+        const radius = 100;
+        const lat = Math.asin(hitPoint.y / radius) * (180 / Math.PI);
+        const lng = Math.atan2(hitPoint.z, hitPoint.x) * (180 / Math.PI);
+        
+        let closestPoint = null;
+        let closestDistance = Infinity;
+        
+        for (const dataPoint of data) {
+          const distance = Math.sqrt(
+            Math.pow(dataPoint.startLat - lat, 2) + 
+            Math.pow(dataPoint.startLng - lng, 2)
+          );
+          
+          if (distance < closestDistance && distance < 10) {
+            closestDistance = distance;
+            closestPoint = dataPoint;
+          }
+        }
+        
+        if (closestPoint) {
+          console.log('Clicked near:', closestPoint.name);
+          onPointClick(closestPoint);
+        }
+      }
+    };
+
+    gl.domElement.addEventListener('click', handleClick);
+    gl.domElement.style.cursor = 'pointer';
+    
+    return () => {
+      gl.domElement.removeEventListener('click', handleClick);
+    };
+  }, [gl, camera, onPointClick, data, isInitialized]);
 
   return <group ref={groupRef} />;
 }
