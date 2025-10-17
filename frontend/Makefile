@@ -13,6 +13,9 @@ test:
 deploy:
 	npm run deploy
 
+add:
+	git add .
+	git status
 
 check:
 	git status
