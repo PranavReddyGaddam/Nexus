@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, memo } from "react";
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar'
-import HeroBackground from './components/HeroBackground'
+import PixelBlast from './PixelBlast/PixelBlast'
 import { World } from './components/ui/globe'
 import { Mic } from 'lucide-react'
 import FileUpload from './components/FileUpload'
@@ -196,9 +196,27 @@ function App() {
           <Route path="/" element={
             <section className="min-h-screen pt-16">
               <div className="fixed inset-0">
-                <HeroBackground />
+                <PixelBlast
+                  variant="circle"
+                  pixelSize={12}
+                  color="#8aa0ff"
+                  patternScale={1.5}
+                  patternDensity={0.35}
+                  pixelSizeJitter={0.4}
+                  enableRipples={true}
+                  rippleSpeed={0.3}
+                  rippleThickness={0.12}
+                  rippleIntensityScale={0.6}
+                  liquid={true}
+                  liquidStrength={0.08}
+                  liquidRadius={1.0}
+                  liquidWobbleSpeed={4.5}
+                  speed={0.6}
+                  edgeFade={0.8}
+                  transparent={true}
+                />
               </div>
-              <main className="relative z-10 flex items-center justify-center min-h-screen">
+              <main className="relative z-10 flex items-center justify-center min-h-screen bg-black/30">
                 <div className="max-w-4xl mx-auto text-center px-4">
                   <div className="relative">
                     <div className="absolute inset-0 blur-[100px] bg-gradient-to-r from-blue-500/20 via-purple-500/20 to-pink-500/20 rounded-full transform -translate-y-1/2"></div>
