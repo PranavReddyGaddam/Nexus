@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     
     # CORS Configuration
     frontend_url: str = "http://localhost:3000"
+
+    # Snowflake Configuration
+    snowflake_account: str = ""
+    snowflake_user: str = ""
+    snowflake_password: str = ""
+    snowflake_warehouse: str = ""
+    snowflake_database: str = ""
+    snowflake_schema: str = ""
     
     class Config:
         env_file = ".env"

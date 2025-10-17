@@ -17,9 +17,10 @@ interface PersonaModalProps {
   persona: Persona | null;
   isOpen: boolean;
   onClose: () => void;
+  onConsult?: (persona: Persona) => void;
 }
 
-export default function PersonaModal({ persona, isOpen, onClose }: PersonaModalProps) {
+export default function PersonaModal({ persona, isOpen, onClose, onConsult }: PersonaModalProps) {
   if (!isOpen || !persona) return null;
 
   return (
@@ -117,7 +118,13 @@ export default function PersonaModal({ persona, isOpen, onClose }: PersonaModalP
           )}
 
           {/* Action Button */}
-          <button className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors">
+          <button
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition-colors"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (onConsult && persona) onConsult(persona);
+            }}
+          >
             Consult {persona.name.split(' ')[0]} for Market Research
           </button>
         </div>
